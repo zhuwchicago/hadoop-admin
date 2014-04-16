@@ -1,0 +1,27 @@
+#!/usr/bin/expect -f
+proc getpass pwprompt {
+        set oldmode [stty -echo -raw]
+        send_user "$pwprompt"
+        set timeout -1
+        expect_user -re "(.*)\n"
+        send_user "\n"
+        eval stty $oldmode
+        return $expect_out(1,string)
+}
+if {[llength $argv] == 0} {
+  send_user "Usage: $argv0 303 cmd(start|stop|status)\n"
+  exit 1
+}
+set node_prefix $env(MASTER_PREFIX)
+set node_suffix $env(NODE_SUFFIX)
+set service_name "hadoop-0.20-mapreduce-jobtracker"
+set user [exec whoami]
+set passwd [getpass "Enter password for $user on service $service_name: "]
+set ip   [lindex $argv 0]
+set cmd  [lindex $argv 1]
+set node ""
+append node ${node_prefix} $ip ${node_suffix}
+spawn ssh -t  ${user}@${node}  sudo /sbin/service ${service_name} $cmd 
+expect "password";
+send "${passwd}\r"
+expect eof;

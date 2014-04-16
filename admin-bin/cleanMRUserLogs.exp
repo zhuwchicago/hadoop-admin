@@ -1,0 +1,31 @@
+#!/usr/bin/expect -f
+proc getpass pwprompt {
+        set oldmode [stty -echo -raw]
+        send_user "$pwprompt"
+        set timeout -1
+        expect_user -re "(.*)\n"
+        send_user "\n"
+        eval stty $oldmode
+        return $expect_out(1,string)
+}
+if {[llength $argv] == 0} {
+  send_user "Usage: $argv0 301 316 job\n"
+  exit 1
+}
+set node_prefix $env(SLAVE_PREFIX)
+set node_suffix $env(NODE_SUFFIX)
+set user [exec whoami]
+set passwd [getpass "Enter password for $user  "]
+set ip   [lindex $argv 0]
+set ip2  [lindex $argv 1]
+set job  [lindex $argv 2]
+while {$ip <= $ip2} {
+set node ""
+append node ${node_prefix} $ip ${node_suffix}
+spawn ssh -t  ${user}@${node}  sudo -u mapred rm -r  /opt/var/hadoop/mapred/local/1/userlogs/$job
+expect "password";
+send "${passwd}\r"
+expect eof;
+set ip [expr $ip+1];
+}
+
