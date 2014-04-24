@@ -1,0 +1,849 @@
+Hadoop Component Configuration For Hadoop Administrator (HCCHA) for Cloudera CDH4.x
+Wayne Zhu
+August 2013
+
+Zookeep Server (ZK)
+-Package verification
+$ rpm -qa | grep cdh4 | grep zookeeper
+zookeeper-server-3.4.5+19-1.cdh4.3.0.p0.14.el6.noarch
+zookeeper-3.4.5+19-1.cdh4.3.0.p0.14.el6.noarch
+$ rpm -ql zookeeper-server
+/etc/rc.d/init.d/zookeeper-server
+$ egrep zookeeper /etc/passwd /etc/group
+/etc/passwd:zookeeper:x:658:658::/opt/zookeeper:/bin/bash
+/etc/group:zookeeper:x:658:
+-Service Command Usage
+Service runs under user zookeeper. Wait for the daemons to start before starting Journal Nodes.
+$ sudo service zookeeper-server start
+$ sudo service zookeeper-server stop
+-Configuration Change
+Specify data directory and zookeeper ensemble on /etc/zookeeper/conf/zoo.cfg: 
+dataDir=/var/lib/zookeeper
+server.1=$zksrv1:2888:3888
+server.2=$zksrv2:2888:3888
+server.3=$zksvr4:2888:3888
+Notes: $zksrv[1-3] are full host names.
+-System Initialization
+Create a file called myid in $dataDir specified in /etc/zookeeper/conf/zoo.cfg in each host. 
+File myid contains only a line of text with integer value 1 ... 255.
+Or through command line on each server with unique ID:
+$ sudo service zookeeper-server init --myid=1
+$ sudo service zookeeper-server init --myid=2
+$ sudo service zookeeper-server init --myid=3
+-Verify with JMX via JMXTERM:
+$ cd /tmp; wget http://downloads.sourceforge.net/cyclops-group/jmxterm-1.0-alpha-4-uber.jar
+$ sudo -u zookeeper java -jar /tmp/jmxterm-1.0-alpha-4-uber.jar
+Welcome to JMX terminal. Type "help" for available commands.
+$>jvms
+26693    (m) - org.apache.zookeeper.server.quorum.QuorumPeerMain /etc/zookeeper/conf/zoo.cfg
+28455    ( ) - jmxterm-1.0-alpha-4-uber.jar
+$>open 26693
+#Connection to 26693 is opened
+$>domains
+#following domains are available
+JMImplementation
+com.sun.management
+java.lang
+java.util.logging
+log4j
+org.apache.ZooKeeperService
+$>domain org.apache.ZooKeeperService
+#domain is set to org.apache.ZooKeeperService
+$>beans
+#domain = org.apache.ZooKeeperService:
+org.apache.ZooKeeperService:name0=ReplicatedServer_id1
+org.apache.ZooKeeperService:name0=ReplicatedServer_id1,name1=replica.1
+org.apache.ZooKeeperService:name0=ReplicatedServer_id1,name1=replica.1,name2=LeaderElection
+org.apache.ZooKeeperService:name0=ReplicatedServer_id1,name1=replica.2
+org.apache.ZooKeeperService:name0=ReplicatedServer_id1,name1=replica.3
+$>quit
+#bye
+
+Journal Node (JN)
+-Package verification
+$ rpm -qa | grep cdh4 | grep hadoop-hdfs-journalnode
+hadoop-hdfs-journalnode-2.0.0+1357-1.cdh4.3.0.p0.21.el6.x86_64
+$ rpm -ql hadoop-hdfs-journalnode
+/etc/default/hadoop-hdfs-journalnode
+/etc/rc.d/init.d/hadoop-hdfs-journalnode
+$ egrep hdfs /etc/passwd /etc/group
+/etc/passwd:hdfs:x:649:649:hadoop hdf:/opt/hdfs:/bin/bash
+/etc/group:hadoop:x:553:mapred,hdfs
+/etc/group:hdfs:x:649:
+-Service Command Usage
+Service runs under user hdfs. Wait for the daemons to start before starting the Name Nodes.
+$ sudo service hadoop-hdfs-journalnode start
+$ sudo service hadoop-hdfs-journalnode stop
+-Configuration Change
+Specify Journal Node edits storage directory created by system administrator in /etc/hadoop/conf/hdfs-site.xml:
+<property>
+  <name>dfs.journalnode.edits.dir</name>
+  <value>/opt/var/hadoop/dfs/jn</value>
+</property>
+
+Name Node with Zookeep Failover Controller (NN-ZKFC)
+-Package verification
+$ rpm -qa | grep cdh4 | grep hadoop-hdfs-namenode
+hadoop-hdfs-namenode-2.0.0+1357-1.cdh4.3.0.p0.21.el6.x86_64
+$ rpm -qa | grep cdh4 | grep hadoop-hdfs-zkfc
+hadoop-hdfs-zkfc-2.0.0+1357-1.cdh4.3.0.p0.21.el6.x86_64
+$ rpm -ql hadoop-hdfs-namenode
+/etc/default/hadoop-hdfs-namenode
+/etc/rc.dinit.d/hadoop-hdfs-namenode
+$ rpm -ql hadoop-hdfs-zkfc
+/etc/default/hadoop-hdfs-zkfc
+/etc/rc.d/init.d/hadoop-hdfs-zkfc
+User hdfs should be in hadoop group. User yarn should not be here.
+$ egrep -e 'hdfs|mapred' /etc/passwd /etc/group
+/etc/passwd:hdfs:x:649:649::/opt/hdfs:/bin/bash
+/etc/passwd:mapred:x:650:650::/opt/mared:/bin/bash
+/etc/group:hadoop:x:398:mapred,hdfs
+/etc/group:hdfs:x:649:
+/etc/group:mapred:x:650:
+-Service Command Usage
+Both name node and zkfc run under user hdfs.
+$ sudo service hadoop-hdfs-namenode start
+$ sudo service hadoop-hdfs-namenode stop
+$ sudo service hadoop-hdfs-zkfc start
+$ sudo service hadoop-hdfs-zkfc stop
+-Configuration Change
+core-site.xml
+Specify in /etc/hadoop/conf/core-site.xml by replacing $clustername,$zksvr[1-3]:
+<property>
+  <name>fs.defaultFS</name>
+  <value>hdfs://$clustername</value>
+</property>
+<property>
+  <name>hadoop.tmp.dir</name>
+  <value>/tmp/hadoop-${user.name}</value>
+  <description>HDFS uses for OS, MR uses for hdfs</description>
+</property>
+<property>
+  <name>ha.zookeeper.quorum</name>
+  <value>$zksvr1:2181,$zksrv2:2181,$zksrv3:2181</value>
+</property>
+<property>
+  <name>fs.trash.interval</name>
+  <value>1440</value>
+</property>
+<property>
+  <name>hadoop.proxyuser.httpfs.hosts</name>
+  <value>*</value>
+</property>
+<property>
+  <name>hadoop.proxyuser.httpfs.groups</name>
+  <value>*</value>
+</property>
+hdfs-site.xml
+Specify in /etc/hadoop/conf/core-site.xml by replacing $clustername,$nnsvr[1-2],$jnsrv[1-3]:
+<!-- Name Node HA with Quorum Journal Manager  -->
+<property>
+  <name>dfs.nameservices</name>
+  <value>$clustername</value>
+</property>
+<property>
+  <name>dfs.ha.namenodes.$clustername</name>
+  <value>nn1,nn2</value>
+</property>
+<property>
+  <name>dfs.namenode.rpc-address.$clustername.nn1</name>
+  <value>$nnsrv1:8020</value>
+</property>
+<property>
+  <name>dfs.namenode.rpc-address.$clustername.nn2</name>
+  <value>$nnsrv2:8020</value>
+</property>
+<property>
+  <name>dfs.namenode.http-address.$clustername.nn1</name>
+  <value>$nnsrv1:50070</value>
+</property>
+<property>
+  <name>dfs.namenode.http-address.$clustername.nn2</name>
+  <value>$nnsrv2:50070</value>
+</property>
+<property>
+  <name>dfs.namenode.shared.edits.dir</name>
+  <value>qjournal://$jnsrv1:8485;$jnsrv2:8485;$jnsrv3:8485/$clustername</value>
+</property>
+<property>
+  <name>dfs.client.failover.proxy.provider.$clustername</name>
+  <value>org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider</value>
+</property> 
+<property>
+  <name>dfs.ha.fencing.methods</name>
+  <value>shell(/bin/true)</value>
+</property>
+<property>
+  <name>dfs.ha.automatic-failover.enabled</name>
+  <value>true</value>
+</property>
+<!-- block size set to 128 MB  -->
+<property>
+  <name>dfs.blocksize</name>
+  <value>134217728</value>
+</property>
+<!-- replication set to 2 with SAN, otherwise 3 by default -->
+<property>
+    <name>dfs.replication</name>
+    <value>2</value>
+</property>
+<!-- directory mounts  -->
+<property>
+  <name>dfs.journalnode.edits.dir</name>
+  <value>/opt/var/hadoop/dfs/jn</value>
+</property>
+<property>
+  <name>dfs.namenode.name.dir</name>
+  <value>file:///opt/var/hadoop/dfs/nn</value>
+</property>
+<property>
+  <name>dfs.datanode.data.dir</name>
+  <value>file:///opt/var/hadoop/dfs/dn/data/[1-4]</value>
+</property>
+-System Initialization
+To Initialize HA state in ZooKeeper, execute the following command only once on a name node:
+$sudo -u hdfs hdfs zkfc -formatZK
+Before starting the NameNode for the first time you need to format the file system on the primary Name Node:
+$ sudo -u hdfs hadoop namenode -format 
+Start the standby NameNode after the primary NameNode is up. The primary NameNode should be in stand-by state.
+$ sudo -u hdfs hdfs namenode -bootstrapStandby
+Start zookeeper failover controller on both NameNodes. 
+$ sudo service hadoop-hdfs-zkfc start
+
+ 
+HTTPS(HTTPFS)
+-Package verification
+$ rpm -qa | grep cdh4 | grep httpfs
+hadoop-httpfs-2.0.0+1357-1.cdh4.3.0.p0.21.el6.x86_64
+$ rpm -ql hadoop-httpfs
+/etc/default/hadoop-httpfs
+...
+/var/run/hadoop-httpfs
+-Service Command Usage
+$ sudo service hadoop-httpfs start
+$ sudo service hadoop-httpfs stop
+
+ 
+Jobtracker with Hue Plugin (JT-HuePLGN)
+-Package verification
+$ rpm -qa | grep cdh4 | grep hadoop-0.20-mapreduce-jobtracker
+hadoop-0.20-mapreduce-jobtracker-2.0.0+1357-1.cdh4.3.0.p0.21.el6.noarch
+$ rpm  -qa | grep cdh4 | grep hue-plugins
+hue-plugins-2.3.0+136-1.cdh4.3.0.p0.16.el6.x86_64
+$ rpm -ql hadoop-0.20-mapreduce-jobtracker
+/etc/default/hadoop-0.20-mapreduce-jobtracker
+/etc/rc.d/init.d/hadoop-0.20-mapreduce-jobtracker
+$  egrep mapred /etc/passwd /etc/group
+/etc/passwd:mapred:x:650:650:hadoop mapred:/opt/mapred:/bin/bash
+/etc/group:mapred:x:650:
+/etc/group:hadoop:x:553:mapred
+-Service Command Usage
+$ sudo service hadoop-0.20-mapreduce-jobtracker start
+$ sudo service hadoop-0.20-mapreduce-jobtracker stop
+-Configuration Change
+Thrift Job Tracker Plugin for Hue
+ThriftJobTrackerPlugin can be found in /usr/lib/hadoop/lib/hue-plugins-2.3.0-cdh4.3.0.jar and need to be copied or symbolically linked in /usr/lib/hadoop-0.20-mapreduce/lib/.
+Add in /etc/hadoop/conf/mapred-site.xml: 
+<property>
+  <name>jobtracker.thrift.address</name>
+  <value>0.0.0.0:9290</value>
+</property>
+<property>
+  <name>mapred.jobtracker.plugins</name>
+  <value>org.apache.hadoop.thriftfs.ThriftJobTrackerPlugin</value>
+  <description>Comma-separated list of jobtracker plug-ins to be activated.</description>
+</property>
+-Fair Scheduler (TBD) on mapred-site.xml
+Sytem Initialization
+$ sudo -u hdfs hadoop fs -mkdir /tmp
+$ sudo -u hdfs hadoop fs -chmod -R 1777 /tmp
+$ sudo -u hdfs hadoop fs -mkdir -p /var/lib/hadoop-hdfs/cache/mapred/mapred/staging
+$ sudo -u hdfs hadoop fs -chmod 1777 /var/lib/hadoop-hdfs/cache/mapred/mapred/staging
+$ sudo -u hdfs hadoop fs -chown -R mapred /var/lib/hadoop-hdfs/cache/mapred
+$ sudo -u hdfs hadoop fs -mkdir /tmp/mapred/system
+$ sudo -u hdfs hadoop fs -chown mapred:hadoop /tmp/mapred/system
+$ hadoop fs -ls -R /
+drwxrwxrwt   - hdfs supergroup          0 2013-07-25 16:50 /tmp
+drwxr-xr-x   - hdfs supergroup          0 2013-07-25 16:50 /tmp/mapred
+drwxr-xr-x   - mapred hadoop              0 2013-07-25 16:50 /tmp/mapred/system
+drwxr-xr-x   - hdfs   supergroup          0 2013-07-25 16:48 /var
+drwxr-xr-x   - hdfs   supergroup          0 2013-07-25 16:48 /var/lib
+drwxr-xr-x   - hdfs   supergroup          0 2013-07-25 16:48 /var/lib/hadoop-hdfs
+drwxr-xr-x   - hdfs   supergroup          0 2013-07-25 16:48 /var/lib/hadoop-hdfs/cache
+drwxr-xr-x   - mapred supergroup          0 2013-07-25 16:48 /var/lib/hadoop-hdfs/cache/mapred
+drwxr-xr-x   - mapred supergroup          0 2013-07-25 16:48 /var/lib/hadoop-hdfs/cache/mapred/mapred
+drwxrwxrwt   - mapred supergroup          0 2013-07-25 16:48 /var/lib/hadoop-hdfs/cache/mapred/mapred/staging
+ 
+DataNode and TaskTracker (DN-TT)
+-Package verification
+$ rpm -qa | grep cdh4 | grep hadoop-hdfs-datanode
+hadoop-hdfs-datanode-2.0.0+1357-1.cdh4.3.0.p0.21.el6.x86_64
+$ rpm -qa | grep cdh4 | grep hadoop-0.20-mapreduce-tasktracker
+hadoop-0.20-mapreduce-tasktracker-2.0.0+1357-1.cdh4.3.0.p0.21.el6.noarch
+$ rpm -ql hadoop-hdfs-datanode
+/etc/default/hadoop-hdfs-datanode
+/etc/rc.d/init.d/hadoop-hdfs-datanode
+$ rpm  -ql hadoop-0.20-mapreduce-tasktracker
+/etc/default/hadoop-0.20-mapreduce-tasktracker
+/etc/rc.d/init.d/hadoop-0.20-mapreduce-tasktracker
+$ egrep -e 'hdfs|mapred' /etc/passwd /etc/group
+/etc/passwd:mapred:x:650:650:hadoop mapred:/opt/mapred:/sbin/nologin
+/etc/passwd:hdfs:x:649:649:hadoop hdf:/opt/hdfs:/bin/bash
+/etc/group:mapred:x:650:
+/etc/group:hadoop:x:553:mapred,hdfs
+/etc/group:hdfs:x:649:
+-Service Command Usage
+$ sudo service hadoop-hdfs-datanode start
+$ sudo service hadoop-hdfs-datanode stop
+$ sudo service hadoop-0.20-mapreduce-tasktracker start
+$ sudo service hadoop-0.20-mapreduce-tasktracker stop
+-Configuration Change
+mapred-site.xml
+Specify in /etc/hadoop/conf/mapred-site.xml assuming 4 different volumes or disks:
+<property>
+ <name>mapred.local.dir</name>
+ <value>/opt/var/mapred/local/1,/opt/var/mapred/local/2,/opt/var/mapred/local/3,/opt/var/mapred/local/4</value>
+</property>
+
+Hive Metastore (HVMeta)
+Note: Hive Metastore and Hive Server2 are two different components and can be installed separately. Hive MetaStore process must start before starting Hive Server2 process.
+-Package verification
+$ rpm -qa | grep cdh4 | grep hive-metastore
+hive-metastore-0.10.0+121-1.cdh4.3.0.p0.16.el6.noarch
+$ rpm -qa | grep mysql-devel
+mysql-devel-5.1.67-1.el6_3.x86_64
+$ rpm -ql  mysql-connector-java
+/etc/maven/fragments/mysql-connector-java
+/usr/lib64/gcj/mysql-connector-java
+/usr/lib64/gcj/mysql-connector-java/mysql-connector-java-5.1.12.jar.db
+/usr/lib64/gcj/mysql-connector-java/mysql-connector-java-5.1.12.jar.so
+/usr/share/doc/mysql-connector-java-5.1.12
+/usr/share/doc/mysql-connector-java-5.1.12/CHANGES
+/usr/share/doc/mysql-connector-java-5.1.12/COPYING
+/usr/share/doc/mysql-connector-java-5.1.12/EXCEPTIONS-CONNECTOR-J
+/usr/share/doc/mysql-connector-java-5.1.12/README
+/usr/share/doc/mysql-connector-java-5.1.12/docs
+/usr/share/doc/mysql-connector-java-5.1.12/docs/README
+/usr/share/doc/mysql-connector-java-5.1.12/docs/connector-j.html
+/usr/share/doc/mysql-connector-java-5.1.12/docs/connector-j.pdf
+/usr/share/java/mysql-connector-java-5.1.12.jar
+/usr/share/java/mysql-connector-java.jar
+/usr/share/maven2/poms/JPP-mysql-connector-java.pom
+$ rpm -ql hive-metastore
+/etc/default/hive-metastore
+/etc/rc.d/init.d/hive-metastore
+$ egrep hive /etc/passwd /etc/group
+/etc/passwd:hive:x:659:659:hadoop hive:/opt/hive:/bin/bash
+/etc/group:hive:x:659:
+-Service Command Usage
+$ sudo service hive-metastore start
+$ sudo service hive-metastore stop
+-Configuration Change
+Hive data directory creation
+$ cat  createhivedatadirinhdfs.sh
+#!/bin/bash
+# Wayne Zhu 07/11/2013
+hivedatadir=/user/hive/warehouse
+sudo -u hdfs hadoop fs -mkdir $hivedatadir
+sudo -u hdfs hadoop fs -chmod -R 1777 $hivedatadir
+sudo -u hdfs hadoop fs -ls    -R /user | grep hive
+$ ./createhivedatadirinhdfs.sh
+drwxr-xr-x   - hdfs    supergroup          0 2013-07-11 09:38 /user/hive
+drwxrwxrwt   - hdfs    supergroup          0 2013-07-11 09:38 /user/hive/warehouse
+Add MySQL configuration
+Add in /etc/hive/conf/hive-site.xml:
+<property>
+  <name>javax.jdo.option.ConnectionURL</name>
+  <value>jdbc:mysql://$mysqlhost/metastore</value>
+  <description>the URL of the MySQL database</description>
+</property>
+<property>
+  <name>javax.jdo.option.ConnectionDriverName</name>
+  <value>com.mysql.jdbc.Driver</value>
+</property>
+<property>
+  <name>javax.jdo.option.ConnectionUserName</name>
+  <value>hive</value>
+</property>
+<property>
+  <name>javax.jdo.option.ConnectionPassword</name>
+  <value>mypassword</value>
+</property>
+<property>
+  <name>datanucleus.autoCreateSchema</name>
+  <value>false</value>
+</property>
+<property>
+  <name>datanucleus.fixedDatastore</name>
+  <value>true</value>
+</property>
+<property>
+  <name>datanucleus.autoStartMechanism</name> 
+  <value>SchemaTable</value>
+</property> 
+<property>
+  <name>hive.metastore.uris</name>
+  <value>thrift://<n.n.n.n>:9083</value>
+  <description>IP address (or fully-qualified domain name) and port of the metastore host</description>
+</property>
+MySQL Setup 
+$ mysql -u root -p
+Enter password:
+mysql> CREATE DATABASE metastore;
+mysql> USE metastore;
+mysql> SOURCE /usr/lib/hive/scripts/metastore/upgrade/mysql/hive-schema-0.10.0.mysql.sql;
+$ mysql -u root -p
+Enter password:
+mysql> CREATE DATABASE metastore;
+mysql> USE metastore;
+mysql> SOURCE /usr/lib/hive/scripts/metastore/upgrade/mysql/hive-schema-0.10.0.mysql.sql;
+mysql> CREATE USER 'hive'@'metastorehost' IDENTIFIED BY 'mypassword';
+mysql> REVOKE ALL PRIVILEGES, GRANT OPTION FROM 'hive'@'metastorehost';
+mysql> GRANT SELECT,INSERT,UPDATE,DELETE,LOCK TABLES,EXECUTE ON metastore.* TO 'hive'@'metastorehost';
+mysql> FLUSH PRIVILEGES;
+mysql> quit;
+ 
+Hive Server2 (HVSrv2)
+Note: Hive Metastore and Hive Server 2 are two different components and can be installed separately. Hive MetaStore process must start before starting Hive Server2 process.
+-Package verification
+$ rpm -qa | grep cdh4 | grep hive-server2
+hive-server2-0.10.0+121-1.cdh4.3.0.p0.16.el6.noarc
+$ rpm -ql hive-server2
+/etc/default/hive-server2
+/etc/rc.d/init.d/hive-server2
+$ egrep hive /etc/passwd /etc/group
+/etc/passwd:hive:x:659:659:hadoop hive:/opt/hive:/bin/bash
+/etc/group:hive:x:659:
+-Service Command Usage
+$ sudo service hive-server2 start
+$ sudo service hive-server2 stop
+-Configuration Change
+hive-site.xml
+Specify in /etc/hive/conf/hive-site.xml by replacing $zksrv[1-3]:
+<property>
+  <name>hive.support.concurrency</name>
+  <description>Enable Hive's Table Lock Manager Service</description>
+  <value>true</value>
+</property>
+<property>
+  <name>hive.zookeeper.quorum</name>
+  <description>Zookeeper quorum used by Hive's Table Lock Manager</description>
+  <value>$zksrv1,$zksrv2,$zksrv3</value>
+</property> 
+
+Sqoop2 Server (SQP2Srv)
+-Package verification
+$ rpm -qa | grep cdh4 | grep sqoop2-server
+sqoop2-server-1.99.1+115-1.cdh4.3.0.p0.11.el6.noarch 
+$ rpm -ql sqoop2-server
+/etc/rc.d/init.d/sqoop2-server 
+$ egrep sqoop2 /etc/passwd /etc/group
+/etc/passwd:sqoop2:x:772:772::/opt/sqoop2:/bin/bash
+/etc/group:sqoop2:x:772:
+-Service Command Usage
+$ sudo /sbin/service sqoop2-server start
+$ sudo /sbin/service sqoop2-server stop
+To check if the service is up:
+$ wget -qO - localhost:12000/sqoop/version
+{"revision":"","protocols":["1"],"date":"Mon May 27 20:29:47 PDT 2013","user":"jenkins","url":"git:\/\/ubuntu-slave02\/var\/lib\/jenkins\/workspace\/CDH4.3.0-Packaging-Sqoop2\/build\/cdh4\/sqoop2\/1.99.1-cdh4.3.0\/source\/common","version":"1.99.1-cdh4.3.0"}
+-Configuration Change
+Hadoop MRv1 configuration
+Change the following in /etc/defaults/sqoop2-server.
+CATALINA_BASE=/usr/lib/sqoop2/sqoop-server
+to
+CATALINA_BASE=/usr/lib/sqoop2/sqoop-server-0.20
+
+Oozie Server (OozSrv)
+-Package(s)
+$ sudo yum install mysql-connector-java
+OR
+$ sudo apt-get install libmysql-java 
+AND
+$ sudo yum install oozie
+OR
+$ sudo apt-get install oozie
+AND 
+$ sduo ln -s /usr/share/java/mysql-connector-java.jar /var/lib/oozie/mysql-connector-java.jar
+AND
+$ cd /tmp; wget http://archive.cloudera.com/gplextras/misc/ext-2.2.zip 
+$ cd /var/lib/oozie; sudo unzip /tmp/ext-2.2.zip    
+-Package verification
+$ rpm -qa | grep cdh4 | grep oozie
+oozie-client-3.3.2+49-1.cdh4.3.0.p0.12.el6.noarch
+oozie-3.3.2+49-1.cdh4.3.0.p0.12.el6.noarch 
+$ rpm -ql  mysql-connector-java | egrep -e "jar$"
+/usr/share/java/mysql-connector-java-5.1.12.jar
+/usr/share/java/mysql-connector-java.jar
+-Service Verification
+$ rpm -ql oozie | grep init.d
+/etc/rc.d/init.d/oozie 
+-System Initialization
+Run Oozie database tool against the database before starting oozie service:
+$ sudo -u oozie /usr/lib/oozie/bin/ooziedb.sh create -run
+-Service Command Usage
+$ sudo service oozie start
+$ sudo service oozie stop
+Service Web URL
+http://<OOZIE_HOSTNAME>:11000/oozie
+-Configuration Change
+Hadoop MRv1 configuration
+Make sure MRv1 is enabled in /etc/oozie/conf/oozie-env.sh:
+CATALINA_BASE=/usr/lib/oozie/oozie-server-0.20
+Configuration ownership change
+$ sudo chown -R hdfs:hadoop /etc/sqoop2/conf
+Support for Oozie Uber JARs
+Add in /etc/oozie/conf/oozie-site.xml:
+<property>
+    <name>oozie.action.mapreduce.uber.jar.enable</name>
+    <value>true</value>
+<property>
+Oozie ShareLib installation in Hadoop HDFS
+Check if sharelib MRv1 is default:
+$ ls -al /usr/lib/oozie/*.gz | grep mr1
+-rw-r--r--. 1 root root 55224819 May 27 23:03 /usr/lib/oozie/oozie-sharelib-mr1.tar.gz
+lrwxrwxrwx. 1 root root       25 Jul  5 14:48 /usr/lib/oozie/oozie-sharelib.tar.gz -> oozie-sharelib-mr1.tar.gz
+-Install sharelib in HDFS:
+$ sudo -u hdfs hadoop fs -mkdir  /user/oozie
+$ sudo -u hdfs hadoop fs -chown oozie:oozie /user/oozie
+$ mkdir /tmp/ooziesharelib
+$ cd /tmp/ooziesharelib
+$ tar xzf /usr/lib/oozie/oozie-sharelib.tar.gz
+$ sudo -u oozie hadoop fs -put share /user/oozie/share
+-MySQL database configuration
+Configure oozie-site.xml in /etc/oozie/conf as follows:
+    <property>
+        <name>oozie.service.JPAService.jdbc.driver</name>
+        <value>com.mysql.jdbc.Driver</value>
+    </property>
+    <property>
+        <name>oozie.service.JPAService.jdbc.url</name>
+        <value>jdbc:mysql://$mysqlhost:3306/oozie</value>
+    </property>
+    <property>
+        <name>oozie.service.JPAService.jdbc.username</name>
+        <value>oozie</value>
+    </property>
+    <property>
+        <name>oozie.service.JPAService.jdbc.password</name>
+        <value>passwd</value>
+    </property>
+-MySQL database Initialization
+$  sudo -u oozie /usr/lib/oozie/bin/ooziedb.sh create -run
+  setting OOZIE_CONFIG=/etc/oozie/conf
+  setting OOZIE_DATA=/var/lib/oozie
+  setting OOZIE_LOG=/var/log/oozie
+  setting OOZIE_CATALINA_HOME=/usr/lib/bigtop-tomcat
+  setting CATALINA_TMPDIR=/var/lib/oozie
+  setting CATALINA_PID=/var/run/oozie/oozie.pid
+  setting CATALINA_BASE=/usr/lib/oozie/oozie-server-0.20
+  setting CATALINA_OPTS=-Xmx1024m
+  setting OOZIE_HTTPS_PORT=11443
+  setting OOZIE_HTTPS_KEYSTORE_PASS=password
+  setting CATALINA_OPTS="$CATALINA_OPTS -Doozie.https.port=${OOZIE_HTTPS_PORT}"
+  setting CATALINA_OPTS="$CATALINA_OPTS -Doozie.https.keystore.pass=${OOZIE_HTTPS_KEYSTORE_PASS}"
+  setting OOZIE_CONFIG=/etc/oozie/conf
+  setting OOZIE_DATA=/var/lib/oozie
+  setting OOZIE_LOG=/var/log/oozie
+  setting OOZIE_CATALINA_HOME=/usr/lib/bigtop-tomcat
+  setting CATALINA_TMPDIR=/var/lib/oozie
+  setting CATALINA_PID=/var/run/oozie/oozie.pid
+  setting CATALINA_BASE=/usr/lib/oozie/oozie-server-0.20
+  setting CATALINA_OPTS=-Xmx1024m
+  setting OOZIE_HTTPS_PORT=11443
+  setting OOZIE_HTTPS_KEYSTORE_PASS=password
+  setting CATALINA_OPTS="$CATALINA_OPTS -Doozie.https.port=${OOZIE_HTTPS_PORT}"
+  setting CATALINA_OPTS="$CATALINA_OPTS -Doozie.https.keystore.pass=${OOZIE_HTTPS_KEYSTORE_PASS}"
+Validate DB Connection
+DONE
+Check DB schema does not exist
+DONE
+Check OOZIE_SYS table does not exist
+DONE
+Create SQL schema
+DONE
+Create OOZIE_SYS table
+DONE
+Set MySQL MEDIUMTEXT flag
+DONE
+Oozie DB has been created for Oozie version '3.3.2-cdh4.3.0'
+-User group verification
+$ egrep oozie /etc/passwd /etc/group
+/etc/passwd:oozie:x:773:773::/opt/oozie:/bin/false
+/etc/group:oozie:x:773:
+
+HCatalog Webhcat Server (WebhcatSrv)
+-Package verification
+$ rpm -qa | grep cdh4 | grep webhcat-server
+webhcat-server-0.5.0+9-1.cdh4.3.0.p0.12.el6.noarch
+$ rpm -ql webhcat-server
+/etc/default/webhcat-server
+/etc/rc.d/init.d/webhcat-server
+-Configuration Change
+Hive metastore configuration for Webhcat
+Add in /etc/hive/conf/hive-site.xml on all hosts where WebHCat will run, as well as all hosts where Pig or MapReduce will be used with HCatalog.
+<property>
+  <name>hive.metastore.uris</name>
+  <value>thrift://<hostname>:9083</value>
+</property>
+-Service Command Usage 
+webhcat process runs under user hive.
+$ sudo service webhcat-server start
+$ sudo service webhcat-server stop
+To access via REST API:
+$ wget http://localhost:50111/templeton/v1/ddl/database/?user.name=hive     
+--2013-07-11 17:33:47--  http://localhost:50111/templeton/v1/ddl/database/?user.name=hive
+Resolving localhost... 127.0.0.1
+Connecting to localhost|127.0.0.1|:50111... connected.
+HTTP request sent, awaiting response... 200 OK
+Length: unspecified [application/json]
+Saving to: âindex.html?user.name=hive.1â
+    [ <=>                                                                ] 25          --.-K/s   in 0s
+2013-07-11 17:33:52 (4.09 MB/s) - âindex.html?user.name=hive.1â
+$ cat index.html?user.name=hive
+{"databases":["default"]}
+
+Hue Server (HueSrv)
+-Package verification
+$ rpm -qa | grep cdh4 | grep hue
+hue-help-2.3.0+136-1.cdh4.3.0.p0.16.el6.x86_64
+hue-metastore-2.3.0+136-1.cdh4.3.0.p0.16.el6.x86_64
+hue-oozie-2.3.0+136-1.cdh4.3.0.p0.16.el6.x86_64
+hue-beeswax-2.3.0+136-1.cdh4.3.0.p0.16.el6.x86_64
+hue-common-2.3.0+136-1.cdh4.3.0.p0.16.el6.x86_64
+hue-filebrowser-2.3.0+136-1.cdh4.3.0.p0.16.el6.x86_64
+hue-jobsub-2.3.0+136-1.cdh4.3.0.p0.16.el6.x86_64
+hue-about-2.3.0+136-1.cdh4.3.0.p0.16.el6.x86_64
+hue-impala-2.3.0+136-1.cdh4.3.0.p0.16.el6.x86_64
+hue-shell-2.3.0+136-1.cdh4.3.0.p0.16.el6.x86_64
+hue-pig-2.3.0+136-1.cdh4.3.0.p0.16.el6.x86_64
+hue-plugins-2.3.0+136-1.cdh4.3.0.p0.16.el6.x86_64
+hue-server-2.3.0+136-1.cdh4.3.0.p0.16.el6.x86_64
+hue-jobbrowser-2.3.0+136-1.cdh4.3.0.p0.16.el6.x86_64
+hue-useradmin-2.3.0+136-1.cdh4.3.0.p0.16.el6.x86_64
+hue-proxy-2.3.0+136-1.cdh4.3.0.p0.16.el6.x86_64
+hue-2.3.0+136-1.cdh4.3.0.p0.16.el6.x86_64
+$ rpm -ql hue-server
+/etc/rc.d/init.d/hue 
+-Service Command Usage
+$ sudo service hue start
+$ sudo service hue stop
+-Configuration Change
+Hive metastore URIS
+If hive-site.xml is not locally configured, copy the file from where Hive is installed and configured. Make sure that Hive metastore uris is correct.
+<property>
+  <name>hive.metastore.uris</name>
+    <value>thrift://$host:9083</value>
+</property>
+Modify hive_conf_dir in /etc/hive/conf hive_conf_dir to point to the directory containing hive-site.xml.
+Hadoop tmp directory change
+Change hadoop.tmp.dir in /etc/hadoop/conf/core-site.xml:
+<property>
+  <name>hadoop.tmp.dir</name>
+  <value>/tmp/hadoop-${user.name}-${hue.suffix}</value>
+</property>
+-MySQL configuration
+Add in /etc/hue/hue.ini directly below the [database] section under the [desktop] line:
+host=$host
+port=3306
+engine=mysql
+user=hue
+password=$passwd
+name=$hue_db_schema
+System Initialization
+As the hue user, create the necessary database tables.
+$  sudo -u hue /usr/share/hue/build/env/bin/hue syncdb --noinput
+Syncing...
+Creating table auth_permission
+Creating table auth_group_permissions
+Creating table auth_group
+Creating table auth_user_user_permissions
+Creating table auth_user_groups
+Creating table auth_user
+Creating table auth_message
+Creating table django_content_type
+Creating table django_session
+Creating table django_site
+Creating table django_admin_log
+Creating table south_migrationhistory
+Installing index for auth.Permission model
+Installing index for auth.Group_permissions model
+Installing index for auth.User_user_permissions model
+Installing index for auth.User_groups model
+Installing index for auth.Message model
+Installing index for admin.LogEntry model
+No fixtures found.
+Migrating...
+Running migrations for desktop:
+ - Migrating forwards to 0005_settings.
+ > desktop:0001_initial
+ > desktop:0002_add_groups_and_homedirs
+ > desktop:0003_group_permissions
+ > desktop:0004_grouprelations
+ > desktop:0005_settings
+ - Loading initial data for desktop.
+No fixtures found.
+Running migrations for beeswax:
+ - Migrating forwards to 0008_auto__add_field_queryhistory_query_type.
+ > beeswax:0001_initial
+ > beeswax:0002_auto__add_field_queryhistory_notify
+ > beeswax:0003_auto__add_field_queryhistory_server_name__add_field_queryhistory_serve
+ > beeswax:0004_auto__add_session__add_field_queryhistory_server_type__add_field_query
+ > beeswax:0005_auto__add_field_queryhistory_statement_number
+ > beeswax:0006_auto__add_field_session_application
+ > beeswax:0007_auto__add_field_savedquery_is_trashed
+ > beeswax:0008_auto__add_field_queryhistory_query_type
+ - Loading initial data for beeswax.
+No fixtures found.
+Running migrations for jobsub:
+ - Migrating forwards to 0006_chg_varchars_to_textfields.
+ > jobsub:0001_initial
+ > jobsub:0002_auto__add_ooziestreamingaction__add_oozieaction__add_oozieworkflow__ad
+ > jobsub:0003_convertCharFieldtoTextField
+ > jobsub:0004_hue1_to_hue2
+ - Migration 'jobsub:0004_hue1_to_hue2' is marked for no-dry-run.
+ > jobsub:0005_unify_with_oozie
+ - Migration 'jobsub:0005_unify_with_oozie' is marked for no-dry-run.
+ > jobsub:0006_chg_varchars_to_textfields
+ - Loading initial data for jobsub.
+No fixtures found.
+Running migrations for oozie:
+ - Migrating forwards to 0021_auto__chg_field_java_args__add_field_job_is_trashed.
+ > oozie:0001_initial
+ > oozie:0002_auto__add_hive
+ > oozie:0003_auto__add_sqoop
+ > oozie:0004_auto__add_ssh
+ > oozie:0005_auto__add_shell
+ > oozie:0006_auto__chg_field_java_files__chg_field_java_archives__chg_field_sqoop_f
+ > oozie:0007_auto__chg_field_sqoop_script_path
+ > oozie:0008_auto__add_distcp
+ > oozie:0009_auto__add_decision
+ > oozie:0010_auto__add_fs
+ > oozie:0011_auto__add_email
+ > oozie:0012_auto__add_subworkflow__chg_field_email_subject__chg_field_email_body
+ > oozie:0013_auto__add_generic
+ > oozie:0014_auto__add_decisionend
+ > oozie:0015_auto__add_field_dataset_advanced_start_instance__add_field_dataset_ins
+ > oozie:0016_auto__add_field_coordinator_job_properties
+ > oozie:0017_auto__add_bundledcoordinator__add_bundle
+ > oozie:0018_auto__add_field_workflow_managed
+ > oozie:0019_auto__add_field_java_capture_output
+ > oozie:0020_chg_large_varchars_to_textfields
+ > oozie:0021_auto__chg_field_java_args__add_field_job_is_trashed
+ - Loading initial data for oozie.
+No fixtures found.
+Running migrations for pig:
+ - Migrating forwards to 0001_initial.
+ > pig:0001_initial
+ - Loading initial data for pig.
+No fixtures found.
+Running migrations for useradmin:
+ - Migrating forwards to 0002_add_ldap_support.
+ > useradmin:0001_permissions_and_profiles
+ - Migration 'useradmin:0001_permissions_and_profiles' is marked for no-dry-run.
+ > useradmin:0002_add_ldap_support
+ - Migration 'useradmin:0002_add_ldap_support' is marked for no-dry-run.
+ - Loading initial data for useradmin.
+No fixtures found.
+
+Synced:
+ > django.contrib.auth
+ > django.contrib.contenttypes
+ > django.contrib.sessions
+ > django.contrib.sites
+ > django.contrib.admin
+ > django_extensions
+ > south
+ > about
+ > filebrowser
+ > help
+ > jobbrowser
+ > metastore
+ > proxy
+ > shell
+
+Migrated:
+ - desktop
+ - beeswax
+ - jobsub
+ - oozie
+ - pig
+ - useradmin
+
+HBase Master (HMaster)
+-Package verification
+$ rpm -qa | grep hbase
+hbase-0.94.6+96-1.cdh4.3.0.p0.13.el6.x86_64
+hive-hbase-0.10.0+121-1.cdh4.3.0.p0.16.el6.noarch
+hbase-thrift
+hbase-rest
+hbase-master-0.94.6+96-1.cdh4.3.0.p0.13.el6.x86_64
+-Service Command Usage
+$sudo service hbase-master start
+$sudo service hbase-thrift start
+$sudo service hbase-rest start
+-Local Directory Creation
+$ sudo -u hdfs hadoop fs -mkdir /hbase
+$ sudo -u hdfs hadoop fs -chown hbase /hbase
+-Configuration Change
+HDFS on data node
+Add the following in /etc/hadoop/conf/hdfs-site.xml:
+<property>
+  <name>dfs.datanode.max.xcievers</name>
+  <value>4096</value>
+</property>
+REST port setting
+Add the following to /etc/hbase/conf/hbase-site.xml:
+<property>
+  <name>hbase.zookeeper.quorum</name>
+  <value>$ZK1HOST,$ZK2HOST,$ZK3HOST</value>
+</property>
+<property>
+  <name>hbase.cluster.distributed</name>
+  <value>true</value>
+</property>
+<property>
+  <name>hbase.rootdir</name>
+  <value>hdfs://$clustername/hbase</value>
+</property>
+<property>
+  <name>hbase.rest.port</name>
+  <value>60050</value>
+</property>
+ 
+HBase Regional Server (HRgnSrv)
+-Package verification
+$ rpm -qa | grep hbase
+hbase-regionserver-0.94.6+96-1.cdh4.3.0.p0.13.el6.x86_64
+hbase-0.94.6+96-1.cdh4.3.0.p0.13.el6.x86_64
+-Service Command Usage
+$sudo service hbase-regionserver start
+
+Hadoop Access Node (AN) - hadoop-client, pig,  sqoop2-client, hive, hcatalog, oozie-client
+-Package verification
+$ rpm -qa |grep cdh4 | grep hadoop-client
+hadoop-client-2.0.0+1357-1.cdh4.3.0.p0.21.el6.x86_64
+$ rpm -qa | grep cdh4 | grep pig
+pig-0.11.0+28-1.cdh4.3.0.p0.11.el6.noarch 
+$ rpm -qa | grep cdh4 | grep sqoop2-client
+sqoop2-client-1.99.1+115-1.cdh4.3.0.p0.11.el6.noarch
+$ rpm -qa | grep cdh4 | grep hive
+hive-0.10.0+121-1.cdh4.3.0.p0.16.el6.noarch
+hive-jdbc-0.10.0+121-1.cdh4.3.0.p0.16.el6.noarch
+User group verification
+$ egrep hive /etc/passwd /etc/group
+/etc/passwd:hive:x:659:659:hadoop hive:/opt/hive:/bin/bash
+/etc/group:hive:x:659:
+$ egrep sqoop2 /etc/passwd /etc/group
+/etc/passwd:sqoop2:x:772:772::/opt/sqoop2:/sbin/nologin
+/etc/group:sqoop2:x:772:
+-Configuration Change
+Hive metastore configuration for HCatalog
+Add in /etc/hive/conf/hive-site.xml:
+<property>
+  <name>hive.metastore.uris</name>
+  <value>thrift://<hostname>:9083</value>
+</property>
+
+
+ 
+ 

@@ -1,0 +1,251 @@
+﻿Hadoop Component Installation For System Administrator (HCISA) for Cloudera CDH 4.x release
+Wayne Zhu
+August 2013
+
+Hadoop administrator needs "sudo -u" access as all users created by installed components and "sudo service" access.
+zookeeper
+hdfs
+mapred
+hive
+hbase
+httpfs
+hue
+sqoop
+sqoop2
+oozie
+
+Zookeep Server (ZK)
+-Package(s)
+zookeeper
+zookeeper-server 
+-Service Sudo Access
+$ sudo service zookeeper-server
+Usage: /etc/init.d/zookeeper-server {start|stop|restart|force-reload|status|force-stop|condrestart|try-restart|init}
+-Configuration Change
+$ sudo chown -R hdfs:hadoop /etc/zookeeper/conf
+ 
+Journal Node (JN)
+-Package(s)
+hadoop-hdfs-journalnode
+-Service Sudo Access
+$ sudo service hadoop-hdfs-journalnode
+Usage: /etc/init.d/hadoop-hdfs-journalnode {start|stop|status|restart|try-restart|condrestart}
+-Local Directory Creation
+Create a directory for dfs.journalnode.edits.dir:
+$ sudo mkdir -p /opt/var/hadoop/dfs/jn
+$ sudo chown -R hdfs:hdfs /opt/var/hadoop/dfs/jn
+-Configuration Change
+$ sudo chown -R hdfs:hadoop /etc/hadoop/conf
+
+Name Node with Zookeep Failover Controller (NN-ZKFC)
+-Package(s)
+hadoop-hdfs-namenode
+hadoop-hdfs-zkfc
+-Service Sudo Access
+$ sudo service hadoop-hdfs-namenode
+Usage: /etc/init.d/hadoop-hdfs-namenode {start|stop|status|restart|try-restart|condrestart|upgrade|rollback|init}
+$ sudo service hadoop-hdfs-zkfc
+Usage: /etc/init.d/hadoop-hdfs-zkfc {start|stop|status|restart|try-restart|condrestart|init}
+-Local Directory Creation
+Create a local directory for dfs.namenode.name.dir:
+$ sudo mkdir -p           /opt/var/hadoop/dfs/nn
+$ sudo chown -R hdfs:hdfs /opt/var/hadoop/dfs/nn
+$ sudo chown 700          /opt/var/hadoop/dfs/nn
+-Configuration Change
+$ sudo touch /etc/hadoop/conf/fair-scheduler.xml 
+$ sudo touch /etc/hadoop/conf/hadoop-env.sh
+$ sudo touch /etc/hadoop/conf/masters
+$ sudo touch /etc/hadoop/conf/slaves
+$ sudo touch /etc/hadoop/conf/exclude
+$ sudo touch /etc/hadoop/conf/include
+$ sudo chown -R hdfs:hadoop /etc/hadoop/conf
+
+HTTPFS (HTTPFS)
+-Package(s)
+hadoop-httpfs
+-Service Sudo Access
+$ sudo service hadoop-httpfs
+Usage: /etc/init.d/hadoop-httpfs {start|stop|status|restart|try-restart|condrestart}
+-Configuration Change
+$ sudo chown -R hdfs:hadoop /etc/hadoop-httpfs/conf
+
+Jobtracker with Hue Plugin (JT-HuePLGN)
+-Package(s)
+hadoop-0.20-mapreduce-jobtracker
+hue-plugins
+AND 
+$ sudo ln -s /usr/lib/hadoop/lib/hue-plugins-2.3.0-cdh4.3.0.jar /usr/lib/hadoop-0.20-mapreduce/lib/hue-plugins-2.3.0-cdh4.3.0.jar
+AND
+$ sudo cp /usr/lib/hadoop-0.20-mapreduce/contrib/fairscheduler/hadoop-fairscheduler-2.0.0-mr1*.jar /usr/lib/hadoop-0.20-mapreduce/lib
+-Service Sudo Access
+$ sudo service hadoop-0.20-mapreduce-jobtracker
+Usage: /etc/init.d/hadoop-0.20-mapreduce-jobtracker {start|stop|status|restart|try-restart|condrestart}
+-Configuration Change
+$ sudo touch /etc/hadoop/conf/fair-scheduler.xml 
+$ sudo touch /etc/hadoop/conf/hadoop-env.sh
+$ sudo touch /etc/hadoop/conf/masters
+$ sudo touch /etc/hadoop/conf/slaves
+$ sudo touch /etc/hadoop/conf/exclude
+$ sudo touch /etc/hadoop/conf/include
+$ sudo chown -R hdfs:hadoop /etc/hadoop/conf
+-Local Directory Creation
+Create local directories for mapred.local.dir for user mapred:
+$ sudo mkdir -p                /opt/var/mapred/local/
+$ sudo chown -R mapred:hadoop  /opt/var/mapred/local/ 
+ 
+DataNode and TaskTracker (DN-TT)
+-Package(s)
+hadoop-0.20-mapreduce-tasktracker 
+hadoop-hdfs-datanode
+-Service Sudo Access 
+Data node process should always start before task tracker process.
+$ sudo service hadoop-hdfs-datanode
+Usage: /etc/init.d/hadoop-hdfs-datanode {start|stop|status|restart|try-restart|condrestart|rollback}
+$ sudo service hadoop-0.20-mapreduce-tasktracker
+Usage: /etc/init.d/hadoop-0.20-mapreduce-tasktracker {start|stop|status|restart|try-restart|condrestart}
+-Local Directory Creation
+Hadoop distributes data in the directories mounted on multiple disks in round-robin fashion. 
+Create local directories for dfs.datanode.data.dir for user hdfs assuming 4 different volumes or disks:
+$ sudo mkdir -p           /opt/var/hadoop/dfs/dn/data/[1-4]
+$ sudo chown -R hdfs:hdfs /opt/var/hadoop/dfs/dn/data/[1-4]
+Create local directories for mapred.local.dir for user mapred assuming 4 different volumes or disks:
+$ sudo mkdir -p                /opt/var/mapred/local/[1-4] 
+$ sudo chown -R mapred:hadoop  /opt/var/mapred/local/[1-4] 
+If using SAN, we need to mount SAN drives as local directories.
+-Configuration Change
+$ sudo touch /etc/hadoop/conf/fair-scheduler.xml 
+$ sudo touch /etc/hadoop/conf/hadoop-env.sh
+$ sudo touch /etc/hadoop/conf/masters
+$ sudo touch /etc/hadoop/conf/slaves
+$ sudo touch /etc/hadoop/conf/exclude
+$ sudo touch /etc/hadoop/conf/include
+$ sudo chown -R hdfs:hadoop /etc/hadoop/conf
+ 
+Hive Metastore (HVMeta)
+Note: Hive Metastore and Hive Server2 are two different components and can be installed separately. Hive MetaStore process must start before starting Hive Server2 process.
+-Package(s)
+hive 
+hive-metastore 
+mysql-connector-java
+mysql-devel  
+AND
+$ ln -s /usr/share/java/mysql-connector-java.jar  /usr/lib/hive/lib/mysql-connector-java.jar
+Service Sudo Access
+$ sudo service hive-metastore
+Usage: /etc/init.d/hive-metastore {start|stop|status|restart|try-restart|condrestart}
+-Configuration Change
+$ sudo chown -R hdfs:hadoop /etc/hive/conf
+Hive Server2 (HVSrv2)
+Note: Hive Metastore and Hive Server 2 are two different components and can be installed separately. Hive MetaStore process must start before starting Hive Server2 process.
+Package(s)
+hive 
+hive-server2 
+-Service Sudo Access
+$ sudo service hive-server2
+Usage: /etc/init.d/hive-server2 {start|stop|status|restart|try-restart|condrestart}
+Configuration Change
+$ sudo chown -R hdfs:hadoop /etc/hive/conf
+
+Sqoop 
+-Package(s)
+sqoop
+and
+sqoop-metastore
+-Service Sudo Access
+$ sudo service sqoop-metastore
+-Configuration Change
+$ sudo chown -R hdfs:hadoop /etc/sqoop/conf
+ 
+SQOOP2 Server (SQP2Srv)
+Notes: there is a bug that we can't set delimeter as ctrl+A.
+-Package(s)
+sqoop2-server
+mysql-connector-java
+AND 
+ln -s /usr/share/java/mysql-connector-java.jar  /var/lib/sqoop2
+And 
+Copy other JDBC jars such as DB2 or Teradata to  /var/lib/sqoop2.
+-Service Sudo Access
+$ sudo service sqoop2-server
+Usage: /etc/init.d/sqoop2-server {start|stop|status|restart|try-restart|condrestart}
+-Configuration Change
+$ sudo chown -R hdfs:hadoop /etc/sqoop2/conf
+$ sudo chown -R hdfs:hadoop /etc/defaults/sqoop2-server
+ 
+Oozie Server (OozSrv)
+-Package(s)
+mysql-connector-java
+oozie
+AND 
+$ sduo ln -s /usr/share/java/mysql-connector-java.jar /var/lib/oozie/mysql-connector-java.jar
+AND
+$ cd /tmp; wget http://archive.cloudera.com/gplextras/misc/ext-2.2.zip 
+$ cd /var/lib/oozie; sudo unzip /tmp/ext-2.2.zip    
+-Service Sudo Access
+$ sudo service oozie
+$ sudo -u oozie /usr/lib/oozie/bin/ooziedb.sh create -run
+-Configuration Change
+$ sudo chown -R hdfs:hadoop /etc/sqoop2/conf
+
+HCatalog Webhcat Server (WebhcatSrv)
+-Package(s)
+webhcat-server
+-Service Sudo Access 
+$ sudo service webhcat-server
+Usage: /etc/init.d/webhcat-server {start|stop|status|restart|try-restart|condrestart}
+-Configuration Change
+$ sudo chown -R hdfs:hadoop /etc/hcatalog/conf
+
+Hue Server (HueSrv) 
+-Package(s)
+hue 
+hue-server
+-Service Sudo Access
+$ sudo service hue
+Usage: hue {start|stop|status|reload|restart|condrestart
+-Configuration Change
+$ sudo chown -R hdfs:hadoop /etc/hue
+
+HBase Master (HBM)
+-Package(s)
+hbase
+hive-hbase
+hbase-thrift
+hbase-rest
+hbase-master
+-Service Sudo Access
+For HBase Master:
+$sudo service hbase-master 
+$sudo service hbase-thrift 
+$sudo service hbase-rest 
+-Configuration Change
+$ sudo chown -R hdfs:hadoop /etc/hbase/conf
+
+HBase region server (HBRgnSrv)
+-Package(s)
+hive-hbase
+hbase-regionserver
+-Service Sudo Access
+$sudo service hbase-regionserver 
+-Configuration Change
+$ sudo chown -R hdfs:hadoop /etc/hbase/conf
+
+Hadoop Access Node (AN) - hadoop-client, pig,  sqoop, sqoop2-client, hive, hcatalog, oozie-client
+-Package(s)
+hadoop-client
+pig
+sqoop2-client
+sqoop
+hive 
+hive-jdbc
+hcatalog
+hbase
+oozie-client
+-Configuration Change
+$ sudo chown -R hdfs:hadoop /etc/hadoop/conf
+$ sudo chown -R hdfs:hadoop /etc/hive/conf
+$ sudo chown -R hdfs:hadoop /etc/sqoop2/conf
+$ sudo chown -R hdfs:hadoop /etc/sqoop/conf
+$ sudo chown -R hdfs:hadoop /etc/hive/conf
+$ sudo chown -R hdfs:hadoop /etc/hcatalog/conf
+$ sudo chown -R hdfs:hadoop /etc/hbase/conf
